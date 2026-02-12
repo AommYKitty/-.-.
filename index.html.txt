@@ -1,0 +1,162 @@
+from IPython.display import HTML
+
+html_content = """
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SciReserve 24H - Turbidimeter Booking</title>
+    <style>
+        :root { --primary: #1e293b; --accent: #0284c7; --bg: #f1f5f9; --danger: #e11d48; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--primary); }
+        .container { max-width: 1000px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 30px; }
+
+        /* ส่วนเลือกวันที่ */
+        .date-section { background: white; padding: 20px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        input[type="date"] { padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 1rem; outline: none; border-bottom: 3px solid var(--accent); }
+
+        .card { background: white; border-radius: 16px; padding: 25px; margin-bottom: 30px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); position: relative; overflow: hidden; }
+        .card::before { content: ""; position: absolute; top: 0; left: 0; width: 6px; height: 100%; background: var(--accent); }
+
+        /* Timeline 24 ชม. */
+        .timeline-container { overflow-x: auto; margin: 45px 0 25px 0; padding-bottom: 10px; }
+        .timeline-rail { position: relative; width: 1200px; background: #f1f5f9; height: 50px; border-radius: 10px; border: 2px solid #e2e8f0; }
+        .time-label { position: absolute; top: -30px; font-size: 11px; color: #64748b; transform: translateX(-50%); white-space: nowrap; }
+
+        .booking-bar { position: absolute; height: 100%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
+
+        /* ฟอร์มการจอง */
+        .booking-form { display: flex; gap: 12px; flex-wrap: wrap; background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
+        .booking-form input { flex: 1; min-width: 140px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+        .btn-submit { background: var(--accent); color: white; border: none; padding: 12px 30px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s; }
+        .btn-submit:hover { background: #0369a1; transform: translateY(-1px); }
+
+        .log-section { margin-top: 20px; }
+        .log-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #fff; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+        .delete-text { color: var(--danger); cursor: pointer; font-size: 12px; text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>🧪 ระบบจองห้องปฏิบัติการ</h1>
+        <p>จองคิวใช้งานเครื่องมือวิทยศาสตร์ (เปิดให้บริการ 24 ชม.)</p>
+    </header>
+
+    <div class="date-section">
+        <strong>📅 เลือกวันที่ต้องการจอง:</strong>
+        <input type="date" id="targetDate" onchange="refreshUI()">
+    </div>
+
+    <div id="display-area"></div>
+</div>
+
+<script>
+    // ตั้งค่าเริ่มต้นวันที่
+    document.getElementById('targetDate').valueAsDate = new Date();
+
+    // รายการอุปกรณ์ (เปลี่ยนเป็นเครื่องวัดความขุ่นแล้ว!)
+    const devices = [
+        { id: 'turb-01', name: "เครื่องวัดความขุ่น (Turbidimeter) " },
+        { id: 'turb-02', name: "ตู้อบร้อน (Hot Air Oven)" },
+        { id: 'sem-01', name: "กล้องจุลทรรศน์อิเล็กตรอน (SEM)" }
+    ];
+
+    // โหลดข้อมูลจาก LocalStorage
+    let db = JSON.parse(localStorage.getItem('lab_db_24h')) || {};
+
+    function refreshUI() {
+        const date = document.getElementById('targetDate').value;
+        const container = document.getElementById('display-area');
+
+        if (!db[date]) db[date] = {};
+
+        container.innerHTML = devices.map(dev => {
+            const bookings = db[date][dev.id] || [];
+            return `
+                <div class="card">
+                    <h2 style="margin-top:0">🔍 ${dev.name}</h2>
+
+                    <div class="timeline-container">
+                        <div class="timeline-rail">
+                            ${Array.from({length: 25}, (_, i) => `<div class="time-label" style="left: ${(i/24)*100}%">${i}:00</div>`).join('')}
+                            ${bookings.map((b, idx) => {
+                                const left = (b.start / 24) * 100;
+                                const width = ((b.end - b.start) / 24) * 100;
+                                return `<div class="booking-bar" style="left:${left}%; width:${width}%" title="${b.user}">
+                                            ${b.user}
+                                        </div>`;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    <div class="booking-form">
+                        <input type="text" id="user-${dev.id}" placeholder="ชื่อผู้จอง (เช่น นายสมชาย)">
+                        <input type="number" id="start-${dev.id}" placeholder="เวลาเริ่ม (0-23)" min="0" max="23">
+                        <input type="number" id="end-${dev.id}" placeholder="สิ้นสุด (1-24)" min="1" max="24">
+                        <button class="btn-submit" onclick="makeBooking('${dev.id}')">จองคิว</button>
+                    </div>
+
+                    <div class="log-section">
+                        <strong>บันทึกการจองวันนี้:</strong>
+                        ${bookings.length === 0 ? '<p style="color:#94a3b8; font-size:14px">ยังไม่มีการจองช่วงเวลาใดเลย</p>' :
+                            bookings.sort((a,b)=>a.start-b.start).map((b, i) => `
+                            <div class="log-item">
+                                <span>⏰ ${b.start}:00 - ${b.end}:00 น. | 👤 ${b.user}</span>
+                                <span class="delete-text" onclick="removeBooking('${dev.id}', ${i})">ยกเลิกการจอง</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function makeBooking(devId) {
+        const date = document.getElementById('targetDate').value;
+        const user = document.getElementById(`user-${devId}`).value;
+        const start = parseInt(document.getElementById(`start-${devId}`).value);
+        const end = parseInt(document.getElementById(`end-${devId}`).value);
+
+        if(!user || isNaN(start) || isNaN(end) || start >= end || start < 0 || end > 24) {
+            alert("กรุณากรอกข้อมูลให้ถูกต้อง (ช่วงเวลาต้องอยู่ระหว่าง 0 - 24 น.)");
+            return;
+        }
+
+        if(!db[date][devId]) db[date][devId] = [];
+
+        // เช็ค Overlap
+        const isBusy = db[date][devId].some(b => (start < b.end && end > b.start));
+        if(isBusy) {
+            alert("❌ ช่วงเวลานี้มีการจองแล้ว กรุณาตรวจสอบตารางเวลาอีกครั้ง");
+            return;
+        }
+
+        db[date][devId].push({ user, start, end });
+        saveData();
+    }
+
+    function removeBooking(devId, index) {
+        const date = document.getElementById('targetDate').value;
+        if(confirm("คุณต้องการลบการจองนี้ใช่หรือไม่?")) {
+            db[date][devId].splice(index, 1);
+            saveData();
+        }
+    }
+
+    function saveData() {
+        localStorage.setItem('lab_db_24h', JSON.stringify(db));
+        refreshUI();
+    }
+
+    refreshUI();
+</script>
+
+</body>
+</html>
+"""
+
+display(HTML(html_content))
